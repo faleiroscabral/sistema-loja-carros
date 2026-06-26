@@ -6,7 +6,7 @@ Sistema em Streamlit para ajudar uma loja de carros a controlar veiculos, fotos,
 
 - Cadastro de veiculos com marca, modelo, ano, cor, km, placa, chassi, preco de compra, preco de venda e status.
 - Status de veiculo: Disponivel, Reservado e Vendido.
-- Cadastro de fotos por URL.
+- Cadastro de fotos por upload ou URL.
 - Cadastro de clientes.
 - Registro de propostas.
 - Registro de vendas.
@@ -59,7 +59,7 @@ O app usa a API REST do Supabase com `requests`, evitando dependencias nativas q
 
 ## Fotos dos carros
 
-Nesta primeira versao, o campo de fotos aceita URLs, uma por linha. O proximo passo natural e usar o Supabase Storage para upload direto dos arquivos pelo Streamlit.
+Nesta primeira versao, o campo de fotos aceita upload de imagens pequenas ou URLs, uma por linha. Para uso pesado com muitas fotos em alta resolucao, o proximo passo natural e usar o Supabase Storage.
 
 ## Seguranca
 

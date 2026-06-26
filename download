@@ -1,6 +1,5 @@
-[theme]
-primaryColor = "#2364AA"
-backgroundColor = "#F7F8FA"
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#1F2933"
-font = "sans serif"
+.venv/
+__pycache__/
+.streamlit/secrets.toml
+.env
+*.pyc

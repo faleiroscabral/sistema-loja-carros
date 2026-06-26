@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import date
 from typing import Any
 from uuid import uuid4
@@ -13,6 +14,117 @@ st.set_page_config(page_title="Sistema Loja de Carros", layout="wide")
 VEHICLE_STATUS = ["Disponivel", "Reservado", "Vendido"]
 PROPOSAL_STATUS = ["Aberta", "Aceita", "Recusada", "Cancelada"]
 PAYMENT_METHODS = ["A vista", "Financiamento", "Troca + volta", "Consorcio"]
+
+
+def inject_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background: #0d0d0f;
+            color: #f5f5f5;
+        }
+        [data-testid="stSidebar"] {
+            background: #111114;
+            border-right: 1px solid #2a2a30;
+        }
+        [data-testid="stMetric"] {
+            background: #17171b;
+            border: 1px solid #2a2a30;
+            border-left: 4px solid #e11d2e;
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+        div[data-testid="stForm"],
+        div[data-testid="stExpander"] {
+            border-color: #2a2a30;
+            background: #141417;
+        }
+        .vehicle-card {
+            display: grid;
+            grid-template-columns: 190px 1fr;
+            gap: 18px;
+            align-items: stretch;
+            background: #17171b;
+            border: 1px solid #2a2a30;
+            border-left: 5px solid #e11d2e;
+            border-radius: 8px;
+            padding: 14px;
+            margin: 0 0 14px 0;
+        }
+        .vehicle-photo {
+            width: 190px;
+            height: 128px;
+            object-fit: cover;
+            border-radius: 6px;
+            background: #0b0b0d;
+            border: 1px solid #2a2a30;
+        }
+        .vehicle-placeholder {
+            width: 190px;
+            height: 128px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            background: #0b0b0d;
+            border: 1px dashed #3a3a42;
+            color: #8b8b95;
+            font-size: 13px;
+        }
+        .vehicle-title {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 750;
+            color: #ffffff;
+        }
+        .vehicle-plate {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 5px 10px;
+            border-radius: 6px;
+            background: #0d0d0f;
+            border: 1px solid #e11d2e;
+            color: #ffffff;
+            font-weight: 700;
+            letter-spacing: .5px;
+        }
+        .vehicle-meta {
+            margin-top: 12px;
+            color: #c9c9d1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 14px;
+        }
+        .vehicle-meta span {
+            background: #222228;
+            padding: 5px 8px;
+            border-radius: 6px;
+        }
+        .status-pill {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: #e11d2e;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 750;
+        }
+        @media (max-width: 760px) {
+            .vehicle-card {
+                grid-template-columns: 1fr;
+            }
+            .vehicle-photo,
+            .vehicle-placeholder {
+                width: 100%;
+                height: 180px;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def money(value: Any) -> str:
@@ -48,14 +160,22 @@ def supabase_headers(prefer: str | None = None) -> dict[str, str]:
 
 def supabase_request(method: str, table: str, **kwargs):
     url, _ = supabase_config()
+    api_base = url if url.endswith("/rest/v1") else f"{url}/rest/v1"
     response = requests.request(
         method,
-        f"{url}/rest/v1/{table}",
+        f"{api_base}/{table}",
         headers=supabase_headers(kwargs.pop("prefer", None)),
         timeout=20,
         **kwargs,
     )
-    response.raise_for_status()
+    if not response.ok:
+        st.error("Nao consegui conectar esta tela ao Supabase.")
+        st.write("Confira se o SQL foi executado e se os Secrets do Streamlit Cloud estao corretos.")
+        st.code(
+            f"Status HTTP: {response.status_code}\nResposta do Supabase:\n{response.text[:1200]}",
+            language="text",
+        )
+        st.stop()
     if response.content:
         return response.json()
     return None
@@ -174,6 +294,10 @@ def vehicle_name(vehicle: dict[str, Any]) -> str:
     return f"{vehicle['brand']} {vehicle['model']} {vehicle['year']} - {vehicle['plate']}"
 
 
+def vehicle_display_name(vehicle: dict[str, Any]) -> str:
+    return f"{vehicle.get('brand', '')} {vehicle.get('model', '')} {vehicle.get('year', '')}".strip()
+
+
 def vehicle_options() -> dict[str, str]:
     return {vehicle_name(vehicle): vehicle["id"] for vehicle in list_rows("vehicles")}
 
@@ -186,7 +310,50 @@ def to_df(rows: list[dict[str, Any]]) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
+def uploaded_file_to_data_url(uploaded_file) -> str:
+    encoded = base64.b64encode(uploaded_file.getvalue()).decode("ascii")
+    return f"data:{uploaded_file.type};base64,{encoded}"
+
+
+def first_vehicle_photo(vehicle_id: str, photos: list[dict[str, Any]]) -> str:
+    for photo in photos:
+        if photo.get("vehicle_id") == vehicle_id and photo.get("photo_url"):
+            return photo["photo_url"]
+    return ""
+
+
+def render_vehicle_list(vehicles: list[dict[str, Any]], photos: list[dict[str, Any]]) -> None:
+    for vehicle in vehicles:
+        photo_url = first_vehicle_photo(vehicle["id"], photos)
+        mileage = f"{int(vehicle.get('mileage') or 0):,}".replace(",", ".")
+        image_html = (
+            f'<img class="vehicle-photo" src="{photo_url}" alt="Foto do carro">'
+            if photo_url
+            else '<div class="vehicle-placeholder">Sem foto</div>'
+        )
+        st.markdown(
+            f"""
+            <div class="vehicle-card">
+                <div>{image_html}</div>
+                <div>
+                    <div class="status-pill">{vehicle.get("status", "")}</div>
+                    <h3 class="vehicle-title">{vehicle_display_name(vehicle)}</h3>
+                    <div class="vehicle-plate">Placa: {vehicle.get("plate", "-")}</div>
+                    <div class="vehicle-meta">
+                        <span>Cor: {vehicle.get("color") or "-"}</span>
+                        <span>Km: {mileage}</span>
+                        <span>Compra: {money(vehicle.get("purchase_price"))}</span>
+                        <span>Venda: {money(vehicle.get("sale_price"))}</span>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
 def top_bar() -> None:
+    inject_styles()
     st.title("Sistema da Loja de Carros")
     st.caption("Veiculos, fotos, clientes, propostas, vendas, despesas e lucro por carro.")
     if is_demo():
@@ -247,7 +414,13 @@ def vehicles_page() -> None:
         c1, c2 = st.columns(2)
         purchase_price = c1.number_input("Preco de compra", min_value=0.0, step=500.0)
         sale_price = c2.number_input("Preco de venda", min_value=0.0, step=500.0)
-        photo_urls = st.text_area("Fotos do carro", help="Cole uma URL por linha.")
+        uploaded_photos = st.file_uploader(
+            "Fotos do carro",
+            type=["jpg", "jpeg", "png", "webp"],
+            accept_multiple_files=True,
+            help="Envie fotos do computador/celular. Para fotos ja hospedadas, cole URLs no campo abaixo.",
+        )
+        photo_urls = st.text_area("URLs de fotos", help="Opcional: cole uma URL por linha.")
         notes = st.text_area("Observacoes")
 
         if st.form_submit_button("Salvar veiculo", type="primary"):
@@ -268,6 +441,11 @@ def vehicles_page() -> None:
             if vehicle_id:
                 row["id"] = vehicle_id
             insert_row("vehicles", row)
+            for uploaded_photo in uploaded_photos:
+                insert_row(
+                    "vehicle_photos",
+                    {"vehicle_id": vehicle_id, "photo_url": uploaded_file_to_data_url(uploaded_photo)},
+                )
             if photo_urls:
                 for url in [line.strip() for line in photo_urls.splitlines() if line.strip()]:
                     insert_row("vehicle_photos", {"vehicle_id": vehicle_id, "photo_url": url})
@@ -277,17 +455,16 @@ def vehicles_page() -> None:
     rows = list_rows("vehicles")
     photos = list_rows("vehicle_photos")
     if rows:
-        table = to_df(rows)
-        for col in ["purchase_price", "sale_price"]:
-            table[col] = table[col].apply(money)
-        st.dataframe(table, use_container_width=True, hide_index=True)
+        st.subheader("Lista de veiculos")
+        status_filter = st.multiselect("Filtrar por status", VEHICLE_STATUS, default=VEHICLE_STATUS)
+        filtered_rows = [vehicle for vehicle in rows if vehicle.get("status") in status_filter]
+        render_vehicle_list(filtered_rows, photos)
 
-        st.subheader("Fotos cadastradas")
-        for vehicle in rows:
-            vehicle_photos = [photo for photo in photos if photo["vehicle_id"] == vehicle["id"]]
-            if vehicle_photos:
-                st.write(vehicle_name(vehicle))
-                st.image([photo["photo_url"] for photo in vehicle_photos], width=180)
+        with st.expander("Ver tabela completa"):
+            table = to_df(filtered_rows)
+            for col in ["purchase_price", "sale_price"]:
+                table[col] = table[col].apply(money)
+            st.dataframe(table, use_container_width=True, hide_index=True)
 
         st.subheader("Atualizar status")
         options = vehicle_options()
