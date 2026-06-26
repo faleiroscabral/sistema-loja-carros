@@ -672,62 +672,69 @@ def vehicles_page() -> None:
         return
 
     st.subheader("Cadastro de veiculos")
-    with st.form("vehicle_form", clear_on_submit=True):
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            brand = selected_or_custom("Marca", BRANDS, "vehicle-brand")
-        with c2:
-            model_options = BRAND_MODELS.get(brand, [])
-            model = selected_or_custom("Modelo", model_options, f"vehicle-model-{brand or 'empty'}")
-        year = c3.number_input("Ano", min_value=1950, max_value=2040, value=2020)
-        color = c4.text_input("Cor")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        brand = selected_or_custom("Marca", BRANDS, "vehicle-brand")
+    with c2:
+        model_options = BRAND_MODELS.get(brand, [])
+        if brand and model_options:
+            model = selected_or_custom("Modelo", model_options, f"vehicle-model-{brand}")
+        elif brand:
+            model = st.text_input("Modelo", key=f"vehicle-model-text-{brand}")
+        else:
+            st.selectbox("Modelo", ["Escolha a marca primeiro"], disabled=True)
+            model = ""
+    year = c3.number_input("Ano", min_value=1950, max_value=2040, value=2020)
+    color = c4.text_input("Cor")
 
-        c1, c2, c3, c4 = st.columns(4)
-        mileage = c1.number_input("Km", min_value=0, value=0, step=500)
-        plate = c2.text_input("Placa")
-        chassis = c3.text_input("Chassi")
-        status = c4.selectbox("Status", VEHICLE_STATUS)
+    c1, c2, c3, c4 = st.columns(4)
+    mileage = c1.number_input("Km", min_value=0, value=0, step=500)
+    plate = c2.text_input("Placa")
+    chassis = c3.text_input("Chassi")
+    status = c4.selectbox("Status", VEHICLE_STATUS)
 
-        c1, c2 = st.columns(2)
-        purchase_price = c1.number_input("Preco de compra", min_value=0.0, step=500.0)
-        sale_price = c2.number_input("Preco de venda", min_value=0.0, step=500.0)
-        uploaded_photos = st.file_uploader(
-            "Fotos do carro",
-            type=["jpg", "jpeg", "png", "webp"],
-            accept_multiple_files=True,
-            help="Envie fotos do computador/celular. Para fotos ja hospedadas, cole URLs no campo abaixo.",
-        )
-        photo_urls = st.text_area("URLs de fotos", help="Opcional: cole uma URL por linha.")
-        notes = st.text_area("Observacoes")
+    c1, c2 = st.columns(2)
+    purchase_price = c1.number_input("Preco de compra", min_value=0.0, step=500.0)
+    sale_price = c2.number_input("Preco de venda", min_value=0.0, step=500.0)
+    uploaded_photos = st.file_uploader(
+        "Fotos do carro",
+        type=["jpg", "jpeg", "png", "webp"],
+        accept_multiple_files=True,
+        help="Envie fotos do computador/celular. Para fotos ja hospedadas, cole URLs no campo abaixo.",
+    )
+    photo_urls = st.text_area("URLs de fotos", help="Opcional: cole uma URL por linha.")
+    notes = st.text_area("Observacoes")
 
-        if st.form_submit_button("Salvar veiculo", type="primary"):
-            vehicle_id = str(uuid4())
-            row = {
-                "brand": brand,
-                "model": model,
-                "year": int(year),
-                "color": color,
-                "mileage": int(mileage),
-                "plate": plate.upper(),
-                "chassis": chassis.upper(),
-                "purchase_price": float(purchase_price),
-                "sale_price": float(sale_price),
-                "status": status,
-                "notes": notes,
-            }
-            if vehicle_id:
-                row["id"] = vehicle_id
-            insert_row("vehicles", row)
-            for uploaded_photo in uploaded_photos:
-                insert_row(
-                    "vehicle_photos",
-                    {"vehicle_id": vehicle_id, "photo_url": uploaded_file_to_data_url(uploaded_photo)},
-                )
-            if photo_urls:
-                for url in [line.strip() for line in photo_urls.splitlines() if line.strip()]:
-                    insert_row("vehicle_photos", {"vehicle_id": vehicle_id, "photo_url": url})
-            st.success("Veiculo salvo.")
-            st.rerun()
+    if st.button("Salvar veiculo", type="primary"):
+        if not brand or not model:
+            st.warning("Escolha a marca e o modelo antes de salvar.")
+            st.stop()
+        vehicle_id = str(uuid4())
+        row = {
+            "brand": brand,
+            "model": model,
+            "year": int(year),
+            "color": color,
+            "mileage": int(mileage),
+            "plate": plate.upper(),
+            "chassis": chassis.upper(),
+            "purchase_price": float(purchase_price),
+            "sale_price": float(sale_price),
+            "status": status,
+            "notes": notes,
+            "id": vehicle_id,
+        }
+        insert_row("vehicles", row)
+        for uploaded_photo in uploaded_photos:
+            insert_row(
+                "vehicle_photos",
+                {"vehicle_id": vehicle_id, "photo_url": uploaded_file_to_data_url(uploaded_photo)},
+            )
+        if photo_urls:
+            for url in [line.strip() for line in photo_urls.splitlines() if line.strip()]:
+                insert_row("vehicle_photos", {"vehicle_id": vehicle_id, "photo_url": url})
+        st.success("Veiculo salvo.")
+        st.rerun()
 
     rows = list_rows("vehicles")
     if rows:
