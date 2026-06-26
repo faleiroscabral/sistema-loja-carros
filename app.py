@@ -243,6 +243,7 @@ def supabase_headers(prefer: str | None = None) -> dict[str, str]:
 
 
 def supabase_request(method: str, table: str, **kwargs):
+    stop_on_error = kwargs.pop("stop_on_error", True)
     url, _ = supabase_config()
     api_base = url if url.endswith("/rest/v1") else f"{url}/rest/v1"
     response = requests.request(
@@ -253,6 +254,8 @@ def supabase_request(method: str, table: str, **kwargs):
         **kwargs,
     )
     if not response.ok:
+        if not stop_on_error:
+            return None
         st.error("Nao consegui conectar esta tela ao Supabase.")
         st.write("Confira se o SQL foi executado e se os Secrets do Streamlit Cloud estao corretos.")
         st.code(
@@ -363,6 +366,7 @@ def list_vehicle_photos(vehicle_id: str) -> list[dict[str, Any]]:
     result = supabase_request(
         "GET",
         "vehicle_photos",
+        stop_on_error=False,
         params={"select": "*", "vehicle_id": f"eq.{vehicle_id}", "order": "created_at.asc"},
     )
     return result or []
@@ -386,6 +390,7 @@ def list_first_photos_for_vehicles(vehicle_ids: list[str]) -> list[dict[str, Any
         result = supabase_request(
             "GET",
             "vehicle_photos",
+            stop_on_error=False,
             params={
                 "select": "*",
                 "vehicle_id": f"eq.{vehicle_id}",
@@ -450,8 +455,12 @@ def to_df(rows: list[dict[str, Any]]) -> pd.DataFrame:
 
 
 def uploaded_file_to_data_url(uploaded_file) -> str:
-    encoded = base64.b64encode(uploaded_file.getvalue()).decode("ascii")
-    return f"data:{uploaded_file.type};base64,{encoded}"
+    image = Image.open(BytesIO(uploaded_file.getvalue())).convert("RGB")
+    image.thumbnail((1400, 1400))
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=82, optimize=True)
+    encoded = base64.b64encode(output.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{encoded}"
 
 
 def first_vehicle_photo(vehicle_id: str, photos: list[dict[str, Any]]) -> str:
