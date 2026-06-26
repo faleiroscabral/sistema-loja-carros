@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from io import BytesIO
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ from uuid import uuid4
 import pandas as pd
 import requests
 import streamlit as st
+from PIL import Image
 
 st.set_page_config(page_title="Sistema Loja de Carros", layout="wide")
 
@@ -17,6 +19,7 @@ VEHICLE_STATUS = ["Disponivel", "Reservado", "Vendido"]
 PROPOSAL_STATUS = ["Aberta", "Aceita", "Recusada", "Cancelada"]
 PAYMENT_METHODS = ["A vista", "Financiamento", "Troca + volta", "Consorcio"]
 LOGO_PATH = Path("assets/neiva-logo.png")
+SOLD_TEMPLATE_PATH = Path("assets/sold-template.png")
 
 
 def inject_styles() -> None:
@@ -78,6 +81,15 @@ def inject_styles() -> None:
             border-radius: 8px;
             padding: 14px;
             margin: 0 0 14px 0;
+            text-decoration: none;
+            color: inherit;
+            transition: border-color .15s ease, transform .15s ease, background .15s ease;
+        }
+        .vehicle-card:hover {
+            border-color: #e11d2e;
+            background: #1d1d22;
+            transform: translateY(-1px);
+            text-decoration: none;
         }
         .vehicle-photo {
             width: 190px;
@@ -399,6 +411,40 @@ def logo_data_url() -> str:
     return f"data:image/png;base64,{encoded}"
 
 
+def image_from_url_or_data_url(photo_url: str) -> Image.Image:
+    if photo_url.startswith("data:"):
+        encoded = photo_url.split(",", 1)[1]
+        return Image.open(BytesIO(base64.b64decode(encoded))).convert("RGB")
+
+    response = requests.get(photo_url, timeout=20)
+    response.raise_for_status()
+    return Image.open(BytesIO(response.content)).convert("RGB")
+
+
+def cover_resize(image: Image.Image, size: tuple[int, int]) -> Image.Image:
+    target_w, target_h = size
+    source_w, source_h = image.size
+    scale = max(target_w / source_w, target_h / source_h)
+    resized = image.resize((int(source_w * scale), int(source_h * scale)))
+    left = (resized.width - target_w) // 2
+    top = (resized.height - target_h) // 2
+    return resized.crop((left, top, left + target_w, top + target_h))
+
+
+def sold_post_bytes(vehicle: dict[str, Any], photos: list[dict[str, Any]]) -> bytes | None:
+    photo_url = first_vehicle_photo(vehicle["id"], photos)
+    if not photo_url or not SOLD_TEMPLATE_PATH.exists():
+        return None
+
+    template = Image.open(SOLD_TEMPLATE_PATH).convert("RGB")
+    car_photo = cover_resize(image_from_url_or_data_url(photo_url), (984, 622))
+    template.paste(car_photo, (48, 277))
+
+    output = BytesIO()
+    template.save(output, format="PNG", optimize=True)
+    return output.getvalue()
+
+
 def render_vehicle_list(vehicles: list[dict[str, Any]], photos: list[dict[str, Any]]) -> None:
     for vehicle in vehicles:
         photo_url = first_vehicle_photo(vehicle["id"], photos)
@@ -410,7 +456,7 @@ def render_vehicle_list(vehicles: list[dict[str, Any]], photos: list[dict[str, A
         )
         st.markdown(
             f"""
-            <div class="vehicle-card">
+            <a class="vehicle-card" href="?vehicle_id={vehicle['id']}">
                 <div>{image_html}</div>
                 <div>
                     <div class="status-pill">{vehicle.get("status", "")}</div>
@@ -423,13 +469,10 @@ def render_vehicle_list(vehicles: list[dict[str, Any]], photos: list[dict[str, A
                         <span>Venda: {money(vehicle.get("sale_price"))}</span>
                     </div>
                 </div>
-            </div>
+            </a>
             """,
             unsafe_allow_html=True,
         )
-        if st.button("Abrir perfil do carro", key=f"profile-{vehicle['id']}"):
-            st.session_state.selected_vehicle_id = vehicle["id"]
-            st.rerun()
 
 
 def render_status_summary(vehicles: list[dict[str, Any]]) -> None:
@@ -505,7 +548,7 @@ def dashboard() -> None:
 
 
 def vehicles_page() -> None:
-    selected_vehicle_id = st.session_state.get("selected_vehicle_id")
+    selected_vehicle_id = st.query_params.get("vehicle_id") or st.session_state.get("selected_vehicle_id")
     if selected_vehicle_id:
         vehicle_profile_page(selected_vehicle_id)
         return
@@ -607,6 +650,8 @@ def vehicle_profile_page(vehicle_id: str) -> None:
 
     if st.button("Voltar para lista de veiculos"):
         st.session_state.selected_vehicle_id = None
+        if "vehicle_id" in st.query_params:
+            del st.query_params["vehicle_id"]
         st.rerun()
 
     vehicle_photos = [photo for photo in photos if photo.get("vehicle_id") == vehicle_id]
@@ -640,6 +685,23 @@ def vehicle_profile_page(vehicle_id: str) -> None:
     if vehicle_photos:
         st.subheader("Fotos")
         st.image([photo["photo_url"] for photo in vehicle_photos if photo.get("photo_url")], width=260)
+
+    if vehicle.get("status") == "Vendido":
+        st.subheader("Post de vendido")
+        try:
+            post_image = sold_post_bytes(vehicle, photos)
+            if post_image:
+                st.download_button(
+                    "Baixar arte para postar",
+                    data=post_image,
+                    file_name=f"vendido-{vehicle.get('plate', 'carro')}.png",
+                    mime="image/png",
+                    type="primary",
+                )
+            else:
+                st.info("Adicione pelo menos uma foto ao carro para gerar a arte de vendido.")
+        except Exception as error:
+            st.warning(f"Nao consegui gerar a arte agora: {error}")
 
     left, right = st.columns([1, 1])
     with left:
@@ -906,6 +968,8 @@ def main() -> None:
             "Configuracao",
         ],
     )
+    if st.query_params.get("vehicle_id"):
+        page = "Veiculos"
     pages = {
         "Painel": dashboard,
         "Veiculos": vehicles_page,
