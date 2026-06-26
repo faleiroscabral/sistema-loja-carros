@@ -559,6 +559,10 @@ def sold_post_bytes(vehicle: dict[str, Any], photos: list[dict[str, Any]]) -> by
     return build_sold_post(image_from_url_or_data_url(photo_url))
 
 
+def sold_post_bytes_from_photo_url(photo_url: str) -> bytes:
+    return build_sold_post(image_from_url_or_data_url(photo_url))
+
+
 def sold_post_bytes_from_upload(uploaded_file) -> bytes:
     car_photo = Image.open(BytesIO(uploaded_file.getvalue())).convert("RGB")
     return build_sold_post(car_photo)
@@ -852,8 +856,35 @@ def vehicle_profile_page(vehicle_id: str) -> None:
         st.subheader("Post de vendido")
         if str(vehicle.get("status", "")).strip().lower() != "vendido":
             st.info("Salve o status como Vendido para manter o carro marcado como vendido no sistema.")
+
+        saved_photo_urls = [photo["photo_url"] for photo in vehicle_photos if photo.get("photo_url")]
+        selected_photo_url = ""
+        if saved_photo_urls:
+            photo_labels = [f"Foto {index + 1}" for index in range(len(saved_photo_urls))]
+            selected_label = st.radio(
+                "Escolha qual foto cadastrada vai no post",
+                photo_labels,
+                horizontal=True,
+                key=f"sold-photo-choice-{vehicle_id}",
+            )
+            selected_index = photo_labels.index(selected_label)
+            selected_photo_url = saved_photo_urls[selected_index]
+            st.image(selected_photo_url, width=360)
+
+        sold_photo = st.file_uploader(
+            "Ou escolha outra foto apenas para este post",
+            type=["jpg", "jpeg", "png", "webp"],
+            key=f"sold-post-photo-{vehicle_id}",
+        )
+
         try:
-            post_image = sold_post_bytes(vehicle, photos)
+            if sold_photo:
+                post_image = sold_post_bytes_from_upload(sold_photo)
+            elif selected_photo_url:
+                post_image = sold_post_bytes_from_photo_url(selected_photo_url)
+            else:
+                post_image = None
+
             if post_image:
                 st.download_button(
                     "Baixar arte para postar",
@@ -863,22 +894,22 @@ def vehicle_profile_page(vehicle_id: str) -> None:
                     type="primary",
                 )
             else:
-                st.info("Nao encontrei foto salva para este carro. Escolha uma foto abaixo para gerar o post agora.")
-                sold_photo = st.file_uploader(
-                    "Foto para o post de vendido",
-                    type=["jpg", "jpeg", "png", "webp"],
-                    key=f"sold-post-photo-{vehicle_id}",
+                st.info("Adicione uma foto ao carro ou escolha uma foto manualmente para gerar o post.")
+        except Exception:
+            st.warning("Nao consegui gerar a arte com essa foto. Tente escolher outra imagem.")
+            fallback_photo = st.file_uploader(
+                "Escolher outra foto",
+                type=["jpg", "jpeg", "png", "webp"],
+                key=f"sold-post-photo-fallback-{vehicle_id}",
+            )
+            if fallback_photo:
+                st.download_button(
+                    "Baixar arte para postar",
+                    data=sold_post_bytes_from_upload(fallback_photo),
+                    file_name=f"vendido-{vehicle.get('plate', 'carro')}.png",
+                    mime="image/png",
+                    type="primary",
                 )
-                if sold_photo:
-                    st.download_button(
-                        "Baixar arte para postar",
-                        data=sold_post_bytes_from_upload(sold_photo),
-                        file_name=f"vendido-{vehicle.get('plate', 'carro')}.png",
-                        mime="image/png",
-                        type="primary",
-                    )
-        except Exception as error:
-            st.warning("Nao consegui gerar a arte com a foto salva. Escolha a foto manualmente abaixo.")
             sold_photo = st.file_uploader(
                 "Foto para o post de vendido",
                 type=["jpg", "jpeg", "png", "webp"],

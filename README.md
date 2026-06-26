@@ -13,6 +13,7 @@ Sistema em Streamlit para ajudar uma loja de carros a controlar veiculos, fotos,
 - Perfil individual de cada carro com especificacoes, custos, propostas, venda e lucro.
 - Card do veiculo clicavel para abrir o perfil.
 - Geracao de arte de vendido para baixar e postar quando o veiculo estiver vendido.
+- Escolha da foto cadastrada que sera usada na arte de vendido.
 - Cadastro de clientes.
 - Registro de propostas.
 - Registro de vendas.
