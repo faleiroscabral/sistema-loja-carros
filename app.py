@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from datetime import date
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ st.set_page_config(page_title="Sistema Loja de Carros", layout="wide")
 VEHICLE_STATUS = ["Disponivel", "Reservado", "Vendido"]
 PROPOSAL_STATUS = ["Aberta", "Aceita", "Recusada", "Cancelada"]
 PAYMENT_METHODS = ["A vista", "Financiamento", "Troca + volta", "Consorcio"]
+LOGO_PATH = Path("assets/neiva-logo.png")
 
 
 def inject_styles() -> None:
@@ -23,6 +25,30 @@ def inject_styles() -> None:
         .stApp {
             background: #0d0d0f;
             color: #f5f5f5;
+        }
+        .brand-header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 8px 0 18px 0;
+            border-bottom: 1px solid #2a2a30;
+            margin-bottom: 18px;
+        }
+        .brand-logo {
+            width: 210px;
+            max-width: 48vw;
+            height: auto;
+        }
+        .brand-title {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 800;
+            color: #ffffff;
+        }
+        .brand-subtitle {
+            margin-top: 4px;
+            color: #c9c9d1;
+            font-size: 15px;
         }
         [data-testid="stSidebar"] {
             background: #111114;
@@ -102,6 +128,43 @@ def inject_styles() -> None:
             padding: 5px 8px;
             border-radius: 6px;
         }
+        .profile-hero {
+            background: #17171b;
+            border: 1px solid #2a2a30;
+            border-left: 5px solid #e11d2e;
+            border-radius: 8px;
+            padding: 18px;
+            margin: 8px 0 18px 0;
+        }
+        .profile-title {
+            margin: 0;
+            font-size: 30px;
+            color: #ffffff;
+            font-weight: 800;
+        }
+        .profile-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .profile-item {
+            background: #101013;
+            border: 1px solid #2a2a30;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .profile-label {
+            color: #8b8b95;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .profile-value {
+            color: #ffffff;
+            font-size: 16px;
+            font-weight: 750;
+            margin-top: 4px;
+        }
         .status-pill {
             display: inline-block;
             padding: 5px 10px;
@@ -119,6 +182,12 @@ def inject_styles() -> None:
             .vehicle-placeholder {
                 width: 100%;
                 height: 180px;
+            }
+            .brand-header {
+                display: block;
+            }
+            .profile-grid {
+                grid-template-columns: 1fr 1fr;
             }
         }
         </style>
@@ -322,6 +391,13 @@ def first_vehicle_photo(vehicle_id: str, photos: list[dict[str, Any]]) -> str:
     return ""
 
 
+def logo_data_url() -> str:
+    if not LOGO_PATH.exists():
+        return ""
+    encoded = base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 def render_vehicle_list(vehicles: list[dict[str, Any]], photos: list[dict[str, Any]]) -> None:
     for vehicle in vehicles:
         photo_url = first_vehicle_photo(vehicle["id"], photos)
@@ -350,12 +426,27 @@ def render_vehicle_list(vehicles: list[dict[str, Any]], photos: list[dict[str, A
             """,
             unsafe_allow_html=True,
         )
+        if st.button("Abrir perfil do carro", key=f"profile-{vehicle['id']}"):
+            st.session_state.selected_vehicle_id = vehicle["id"]
+            st.rerun()
 
 
 def top_bar() -> None:
     inject_styles()
-    st.title("Sistema da Loja de Carros")
-    st.caption("Veiculos, fotos, clientes, propostas, vendas, despesas e lucro por carro.")
+    logo = logo_data_url()
+    logo_html = f'<img class="brand-logo" src="{logo}" alt="Neiva Multimarcas">' if logo else ""
+    st.markdown(
+        f"""
+        <div class="brand-header">
+            {logo_html}
+            <div>
+                <h1 class="brand-title">Neiva Multimarcas</h1>
+                <div class="brand-subtitle">Sistema de estoque, clientes, vendas, custos e lucro por veiculo.</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     if is_demo():
         st.info("Modo demo ativo. Configure o Supabase em .streamlit/secrets.toml para salvar no banco.")
 
@@ -397,6 +488,11 @@ def dashboard() -> None:
 
 
 def vehicles_page() -> None:
+    selected_vehicle_id = st.session_state.get("selected_vehicle_id")
+    if selected_vehicle_id:
+        vehicle_profile_page(selected_vehicle_id)
+        return
+
     st.subheader("Cadastro de veiculos")
     with st.form("vehicle_form", clear_on_submit=True):
         c1, c2, c3, c4 = st.columns(4)
@@ -474,6 +570,132 @@ def vehicles_page() -> None:
             update_row("vehicles", options[selected], {"status": new_status})
             st.success("Status atualizado.")
             st.rerun()
+
+
+def vehicle_profile_page(vehicle_id: str) -> None:
+    vehicles = list_rows("vehicles")
+    photos = list_rows("vehicle_photos")
+    expenses = list_rows("expenses")
+    proposals = list_rows("proposals")
+    sales = list_rows("sales")
+    customers = list_rows("customers")
+
+    vehicle = next((item for item in vehicles if item["id"] == vehicle_id), None)
+    if not vehicle:
+        st.warning("Veiculo nao encontrado.")
+        if st.button("Voltar para lista"):
+            st.session_state.selected_vehicle_id = None
+            st.rerun()
+        return
+
+    if st.button("Voltar para lista de veiculos"):
+        st.session_state.selected_vehicle_id = None
+        st.rerun()
+
+    vehicle_photos = [photo for photo in photos if photo.get("vehicle_id") == vehicle_id]
+    vehicle_expenses = [expense for expense in expenses if expense.get("vehicle_id") == vehicle_id]
+    vehicle_proposals = [proposal for proposal in proposals if proposal.get("vehicle_id") == vehicle_id]
+    vehicle_sales = [sale for sale in sales if sale.get("vehicle_id") == vehicle_id]
+    sale = vehicle_sales[0] if vehicle_sales else None
+
+    purchase_price = float(vehicle.get("purchase_price") or 0)
+    sale_price = float((sale or {}).get("sale_price") or vehicle.get("sale_price") or 0)
+    total_expenses = sum(float(expense.get("amount") or 0) for expense in vehicle_expenses)
+    profit = sale_price - purchase_price - total_expenses
+
+    st.markdown(
+        f"""
+        <div class="profile-hero">
+            <div class="status-pill">{vehicle.get("status", "")}</div>
+            <h2 class="profile-title">{vehicle_display_name(vehicle)}</h2>
+            <div class="vehicle-plate">Placa: {vehicle.get("plate", "-")}</div>
+            <div class="profile-grid">
+                <div class="profile-item"><div class="profile-label">Compra</div><div class="profile-value">{money(purchase_price)}</div></div>
+                <div class="profile-item"><div class="profile-label">Venda/Anuncio</div><div class="profile-value">{money(sale_price)}</div></div>
+                <div class="profile-item"><div class="profile-label">Custos ate agora</div><div class="profile-value">{money(total_expenses)}</div></div>
+                <div class="profile-item"><div class="profile-label">Lucro</div><div class="profile-value">{money(profit)}</div></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if vehicle_photos:
+        st.subheader("Fotos")
+        st.image([photo["photo_url"] for photo in vehicle_photos if photo.get("photo_url")], width=260)
+
+    left, right = st.columns([1, 1])
+    with left:
+        st.subheader("Especificacoes")
+        st.dataframe(
+            to_df(
+                [
+                    {"campo": "Marca", "valor": vehicle.get("brand", "")},
+                    {"campo": "Modelo", "valor": vehicle.get("model", "")},
+                    {"campo": "Ano", "valor": vehicle.get("year", "")},
+                    {"campo": "Cor", "valor": vehicle.get("color", "")},
+                    {"campo": "Km", "valor": vehicle.get("mileage", "")},
+                    {"campo": "Placa", "valor": vehicle.get("plate", "")},
+                    {"campo": "Chassi", "valor": vehicle.get("chassis", "")},
+                    {"campo": "Observacoes", "valor": vehicle.get("notes", "")},
+                ]
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+    with right:
+        st.subheader("Resumo financeiro")
+        cols = st.columns(2)
+        cols[0].metric("Preco de compra", money(purchase_price))
+        cols[1].metric("Preco venda/anuncio", money(sale_price))
+        cols[0].metric("Custos", money(total_expenses))
+        cols[1].metric("Lucro", money(profit))
+
+    st.subheader("Custos do veiculo")
+    if vehicle_expenses:
+        expense_table = to_df(vehicle_expenses)
+        expense_table["amount"] = expense_table["amount"].apply(money)
+        st.dataframe(expense_table[["description", "amount", "expense_date"]], use_container_width=True, hide_index=True)
+    else:
+        st.write("Nenhum custo registrado para este veiculo.")
+
+    st.subheader("Propostas deste veiculo")
+    if vehicle_proposals:
+        customer_by_id = {customer["id"]: customer.get("name", "") for customer in customers}
+        proposal_rows = []
+        for proposal in vehicle_proposals:
+            proposal_rows.append(
+                {
+                    "cliente": customer_by_id.get(proposal.get("customer_id"), proposal.get("customer_id")),
+                    "valor": money(proposal.get("proposed_price")),
+                    "pagamento": proposal.get("payment_method", ""),
+                    "status": proposal.get("status", ""),
+                    "observacoes": proposal.get("notes", ""),
+                }
+            )
+        st.dataframe(to_df(proposal_rows), use_container_width=True, hide_index=True)
+    else:
+        st.write("Nenhuma proposta registrada para este veiculo.")
+
+    st.subheader("Venda")
+    if sale:
+        customer_by_id = {customer["id"]: customer.get("name", "") for customer in customers}
+        st.dataframe(
+            to_df(
+                [
+                    {
+                        "cliente": customer_by_id.get(sale.get("customer_id"), sale.get("customer_id")),
+                        "valor": money(sale.get("sale_price")),
+                        "data": sale.get("sale_date", ""),
+                        "observacoes": sale.get("notes", ""),
+                    }
+                ]
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.write("Este veiculo ainda nao tem venda registrada.")
 
 
 def customers_page() -> None:
