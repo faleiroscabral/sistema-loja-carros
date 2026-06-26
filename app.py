@@ -432,6 +432,30 @@ def render_vehicle_list(vehicles: list[dict[str, Any]], photos: list[dict[str, A
             st.rerun()
 
 
+def render_status_summary(vehicles: list[dict[str, Any]]) -> None:
+    counts = {status: 0 for status in VEHICLE_STATUS}
+    for vehicle in vehicles:
+        status = vehicle.get("status", "Disponivel")
+        counts[status] = counts.get(status, 0) + 1
+
+    total = max(sum(counts.values()), 1)
+    for status, count in counts.items():
+        percent = int((count / total) * 100)
+        st.markdown(
+            f"""
+            <div style="margin-bottom: 12px;">
+                <div style="display:flex;justify-content:space-between;color:#f5f5f5;font-weight:700;">
+                    <span>{status}</span><span>{count}</span>
+                </div>
+                <div style="height:10px;background:#222228;border-radius:999px;overflow:hidden;margin-top:6px;">
+                    <div style="height:10px;width:{percent}%;background:#e11d2e;border-radius:999px;"></div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
 def top_bar() -> None:
     inject_styles()
     logo_col, title_col = st.columns([1, 3])
@@ -467,11 +491,10 @@ def dashboard() -> None:
     left, right = st.columns([1, 1])
     with left:
         st.subheader("Veiculos por status")
-        chart_data = to_df(vehicles)
-        if chart_data.empty:
+        if not vehicles:
             st.write("Nenhum veiculo cadastrado.")
         else:
-            st.bar_chart(chart_data.groupby("status").size().reset_index(name="quantidade"), x="status", y="quantidade")
+            render_status_summary(vehicles)
     with right:
         st.subheader("Despesas recentes")
         st.metric("Total gasto em preparacao", money(total_expenses))
