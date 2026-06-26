@@ -356,6 +356,48 @@ def list_rows(table: str) -> list[dict[str, Any]]:
     return result or []
 
 
+def list_vehicle_photos(vehicle_id: str) -> list[dict[str, Any]]:
+    if is_demo():
+        init_demo_data()
+        return [photo for photo in st.session_state["vehicle_photos"] if photo.get("vehicle_id") == vehicle_id]
+    result = supabase_request(
+        "GET",
+        "vehicle_photos",
+        params={"select": "*", "vehicle_id": f"eq.{vehicle_id}", "order": "created_at.asc"},
+    )
+    return result or []
+
+
+def list_first_photos_for_vehicles(vehicle_ids: list[str]) -> list[dict[str, Any]]:
+    if is_demo():
+        init_demo_data()
+        photos = []
+        for vehicle_id in vehicle_ids:
+            vehicle_photo = next(
+                (photo for photo in st.session_state["vehicle_photos"] if photo.get("vehicle_id") == vehicle_id),
+                None,
+            )
+            if vehicle_photo:
+                photos.append(vehicle_photo)
+        return photos
+
+    photos = []
+    for vehicle_id in vehicle_ids:
+        result = supabase_request(
+            "GET",
+            "vehicle_photos",
+            params={
+                "select": "*",
+                "vehicle_id": f"eq.{vehicle_id}",
+                "order": "created_at.asc",
+                "limit": "1",
+            },
+        )
+        if result:
+            photos.extend(result)
+    return photos
+
+
 def insert_row(table: str, row: dict[str, Any]) -> None:
     if is_demo():
         init_demo_data()
@@ -639,11 +681,11 @@ def vehicles_page() -> None:
             st.rerun()
 
     rows = list_rows("vehicles")
-    photos = list_rows("vehicle_photos")
     if rows:
         st.subheader("Lista de veiculos")
         status_filter = st.multiselect("Filtrar por status", VEHICLE_STATUS, default=VEHICLE_STATUS)
         filtered_rows = [vehicle for vehicle in rows if vehicle.get("status") in status_filter]
+        photos = list_first_photos_for_vehicles([vehicle["id"] for vehicle in filtered_rows])
         render_vehicle_list(filtered_rows, photos)
 
         with st.expander("Ver tabela completa"):
@@ -654,7 +696,7 @@ def vehicles_page() -> None:
 
 def vehicle_profile_page(vehicle_id: str) -> None:
     vehicles = list_rows("vehicles")
-    photos = list_rows("vehicle_photos")
+    photos = list_vehicle_photos(vehicle_id)
     expenses = list_rows("expenses")
     proposals = list_rows("proposals")
     sales = list_rows("sales")
