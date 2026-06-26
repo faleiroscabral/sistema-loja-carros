@@ -58,7 +58,7 @@ Use o Streamlit Community Cloud:
 
 1. Conecte sua conta do GitHub.
 2. Escolha o repositorio.
-3. Configure o arquivo principal como `app.py`.
+3. Configure o arquivo principal como `main.py`.
 4. Adicione os secrets do Supabase no painel do Streamlit Cloud.
 
 O app usa a API REST do Supabase com `requests`, evitando dependencias nativas que podem falhar em versoes novas do Python no Streamlit Cloud.
