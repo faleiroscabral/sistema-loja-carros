@@ -677,6 +677,31 @@ def vehicle_profile_page(vehicle_id: str) -> None:
         st.subheader("Fotos")
         st.image([photo["photo_url"] for photo in vehicle_photos if photo.get("photo_url")], width=260)
 
+    with st.expander("Adicionar fotos ao carro", expanded=not vehicle_photos):
+        new_uploaded_photos = st.file_uploader(
+            "Enviar novas fotos",
+            type=["jpg", "jpeg", "png", "webp"],
+            accept_multiple_files=True,
+            key=f"profile-photos-{vehicle_id}",
+        )
+        new_photo_urls = st.text_area("Ou colar URLs de fotos", key=f"profile-photo-urls-{vehicle_id}")
+        if st.button("Salvar fotos", type="primary"):
+            saved = 0
+            for uploaded_photo in new_uploaded_photos:
+                insert_row(
+                    "vehicle_photos",
+                    {"vehicle_id": vehicle_id, "photo_url": uploaded_file_to_data_url(uploaded_photo)},
+                )
+                saved += 1
+            for url in [line.strip() for line in new_photo_urls.splitlines() if line.strip()]:
+                insert_row("vehicle_photos", {"vehicle_id": vehicle_id, "photo_url": url})
+                saved += 1
+            if saved:
+                st.success("Fotos adicionadas.")
+                st.rerun()
+            else:
+                st.info("Selecione uma foto ou cole uma URL antes de salvar.")
+
     if vehicle.get("status") == "Vendido":
         st.subheader("Post de vendido")
         try:
