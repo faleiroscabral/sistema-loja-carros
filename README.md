@@ -5,9 +5,11 @@ Sistema em Streamlit para ajudar uma loja de carros a controlar veiculos, fotos,
 ## Funcoes da primeira versao
 
 - Cadastro de veiculos com marca, modelo, ano, cor, km, placa, chassi, preco de compra, preco de venda e status.
+- Cadastro com lista pesquisavel de marcas e modelos filtrados pela marca.
 - Status de veiculo: Disponivel, Reservado e Vendido.
 - Cadastro de fotos por upload ou URL.
 - Lista visual de veiculos com foto, nome, placa, status e valores.
+- Filtro de lista por status e por marca.
 - Perfil individual de cada carro com especificacoes, custos, propostas, venda e lucro.
 - Card do veiculo clicavel para abrir o perfil.
 - Geracao de arte de vendido para baixar e postar quando o veiculo estiver vendido.
